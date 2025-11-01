@@ -19,16 +19,16 @@ def check_modifiable_fee(code: str) -> bool:
     Returns True if the contract contains functions that allow the owner
     or privileged roles to change transaction taxes or fees. Examples
     include setTax, setFee, buyFee and sellFee functions. The detection
-    is case‑insensitive and searches for common patterns reported by scanners【933481489912976†L374-L399】.
+    is case-insensitive and searches for common patterns reported by scanners.
     """
     patterns = [
-        r"settax",
-        r"setfee",
-        r"setfees",
-        r"updatetax",
-        r"buyfee",
-        r"sellfee",
-        r"changetax",
+        "settax",
+        "setfee",
+        "setfees",
+        "updatetax",
+        "buyfee",
+        "sellfee",
+        "changetax",
     ]
     code_lower = code.lower()
     return any(p in code_lower for p in patterns)
@@ -37,18 +37,18 @@ def check_modifiable_fee(code: str) -> bool:
 def check_blacklist_whitelist(code: str) -> bool:
     """
     Returns True if the contract contains blacklist, whitelist or other
-    user‑restriction mechanisms. Contracts that permit a privileged address
+    user-restriction mechanisms. Contracts that permit a privileged address
     to ban or allow specific users are considered high risk because they
-    can arbitrarily freeze user funds【933481489912976†L374-L387】.
+    can arbitrarily freeze user funds.
     """
     patterns = [
-        r"blacklist",
-        r"whitelist",
-        r"setmaxtx",  # often used to limit transfers
-        r"maxwallet",
-        r"banuser",
-        r"blocklist",
-        r"removeliquidity",
+        "blacklist",
+        "whitelist",
+        "setmaxtx",   # often used to limit transfers
+        "maxwallet",
+        "banuser",
+        "blocklist",
+        "removeliquidity",
     ]
     code_lower = code.lower()
     return any(p in code_lower for p in patterns)
@@ -58,7 +58,7 @@ def check_uniswap_restriction(code: str) -> bool:
     """
     Detects attempts to prevent transfers to or from the Uniswap liquidity
     pool. Honeypot scams often include a clause like `require(to != uniswapPair)`
-    which blocks selling【933481489912976†L374-L399】.
+    which blocks selling.
     """
     code_lower = code.lower().replace(" ", "")
     restricted_keywords = [
@@ -74,7 +74,7 @@ def check_owner_functions(code: str) -> bool:
     """
     Determines if the contract retains significant control with an active owner.
     If the code contains many `onlyOwner` calls or defines an `owner()` function
-    without renouncing ownership, it suggests centralised control【933481489912976†L374-L387】.
+    without renouncing ownership, it suggests centralised control.
     This function returns True when `onlyOwner` appears multiple times or the
     owner can renounce but has not done so.
     """
@@ -91,7 +91,7 @@ def check_owner_functions(code: str) -> bool:
 def check_minting(code: str) -> bool:
     """
     Checks for mint functions that allow privileged addresses to increase supply.
-    Hidden minting can dilute holders and is a known rug lever【933481489912976†L374-L382】.
+    Hidden minting can dilute holders and is a known rug lever.
     """
     code_lower = code.lower()
     return "_mint(" in code_lower or "function mint" in code_lower
@@ -102,10 +102,16 @@ def check_pause_trading(code: str) -> bool:
     Detects pause/unpause functionality that can halt trading arbitrarily.
     Contracts may include `pauseTrading`, `pause`, `unpause` or similar
     functions. Legitimate uses exist, but for this scanner any pause
-    capability raises a caution flag【933481489912976†L374-L387】.
+    capability raises a caution flag.
     """
     code_lower = code.lower()
-    patterns = ["pausetrading", "pause()", "unpause()", "settrading", "enabletrading"]
+    patterns = [
+        "pausetrading",
+        "pause",        # less strict than "pause()" to avoid missing variants
+        "unpause",      # less strict than "unpause()"
+        "settrading",
+        "enabletrading",
+    ]
     return any(p in code_lower for p in patterns)
 
 
@@ -114,14 +120,14 @@ def check_proxy_pattern(code: str) -> bool:
     Detects proxy or delegatecall usage which may indicate an upgradeable
     contract. While not inherently malicious, proxy patterns allow the
     logic to change after deployment, which can hide honeypot behaviour.
-    The check searches for `delegatecall`, `proxy` or `implementation` strings.
+    The check searches for `delegatecall`, `proxy`, `eip1967` or `implementation`.
     """
     code_lower = code.lower().replace(" ", "")
     patterns = [
         "delegatecall(",
-        "delegatecall(",  # duplicate intentional: emphasises call detection
+        "eip1967",        # common storage slot marker for proxies
+        "implementation", # generic to catch many implementations
         "proxy",
-        "implementation(",
     ]
     return any(p in code_lower for p in patterns)
 
@@ -149,8 +155,8 @@ def check_transfer_limits(code: str) -> bool:
 
 def check_unverified_code(source_code: str) -> bool:
     """
-    Returns True if the source code is empty. According to Token Sniffer,
-    unverified source code is a black box and therefore a serious risk【933481489912976†L290-L304】.
+    Returns True if the source code is empty. Unverified source code is a
+    black box and therefore a serious risk.
     """
     return not source_code or len(source_code.strip()) == 0
 
