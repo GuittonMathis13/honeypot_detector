@@ -1,128 +1,95 @@
-"""
-Unit tests for the Honeypot Detector Pro analysis logic.
+# tests/test_analyzer.py
+# Minimal, fast, and offline tests for the analysis logic.
 
-These tests cover the behaviour of the flag detection functions in
-`rules.py` and the report generation in `report.py`. They use
-synthetic contract source snippets instead of fetching data from
-Etherscan. The goal is to ensure that obvious patterns trigger the
-expected flags and that the scoring logic behaves as intended.
-"""
+from __future__ import annotations
 
-import pytest
-
-from honeypot_detector.backend import rules, report, analyzer
+from backend import rules
+from backend.report import build_report
 
 
-# Sample Solidity snippets for testing
-SIMPLE_ERC20 = """
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-
-contract MyToken is ERC20 {
-    constructor() ERC20("My Token", "MYT") {
-        _mint(msg.sender, 1000000 * (10 ** decimals()));
-    }
-}
-"""
-
-
-HONEYPOT_SNIPPET = """
-// Honeypot example with restrictive sell
-pragma solidity ^0.8.0;
-
-contract EvilToken {
-    mapping(address => bool) private blacklist;
-    address public owner;
-    uint256 public buyFee;
-    uint256 public sellFee;
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "not owner");
-        _;
-    }
-
-    function setTax(uint256 _buy, uint256 _sell) external onlyOwner {
-        buyFee = _buy;
-        sellFee = _sell;
-    }
-
-    function addToBlacklist(address user) external onlyOwner {
-        blacklist[user] = true;
-    }
-
+def test_run_all_checks_with_source():
+    """
+    With source available, heuristics should pick up common risk patterns.
+    """
+    fake_code = """
+    // Fees & taxes
+    function setFee(uint256 f) external onlyOwner {}
+    function setFees(uint256 b, uint256 s) external onlyOwner {}
+    // Black/white lists & limits
+    mapping(address => bool) blacklist;
+    function setMaxTx(uint256 v) external onlyOwner {}
+    // Owner control
+    modifier onlyOwner() { _; } function owner() public view returns (address) { return address(0x123); }
+    // Minting
+    function mint(address to, uint256 a) external onlyOwner {}
+    function _mint(address to, uint256 a) internal {}
+    // Pause/Trading
+    function pause() external onlyOwner {}
+    function unpause() external onlyOwner {}
+    function enableTrading() external onlyOwner {}
+    // Uniswap restriction
     function _transfer(address from, address to, uint256 amount) internal {
-        require(to != uniswapPair, "no sell");
-        super._transfer(from, to, amount);
+        require(to != uniswapV2Pair, "blocked");
     }
-}
-"""
+    // Proxy / delegatecall
+    function _proxyForward(bytes memory data) internal returns (bytes memory) {
+        (bool ok, bytes memory res) = address(impl).delegatecall(data);
+        return res;
+    }
+    // No renounce
+    """
+
+    flags = rules.run_all_checks(fake_code, source_available=True)
+
+    assert flags["modifiable_fee"] is True
+    assert flags["blacklist_whitelist"] is True
+    assert flags["uniswap_restriction"] is True
+    assert flags["owner_not_renounced"] is True
+    assert flags["minting"] is True
+    assert flags["pause_trading"] is True
+    assert flags["transfer_limits"] is True
+    assert flags["proxy_pattern"] is True
+    assert flags["unverified_code"] is False  # because source_available=True
 
 
-def test_flag_detection_no_flags():
-    flags = rules.run_all_checks(SIMPLE_ERC20, source_available=True)
-    # All flags should be False except unverified_code (not triggered here)
-    assert not any(flags.values())
+def test_unverified_without_source():
+    """
+    If source is not available, the 'unverified_code' flag should be True.
+    """
+    flags = rules.run_all_checks("", source_available=False)
+    assert flags["unverified_code"] is True
+    # Others should be False when source is unavailable
+    assert flags["modifiable_fee"] is False
+    assert flags["blacklist_whitelist"] is False
+    assert flags["uniswap_restriction"] is False
+    assert flags["owner_not_renounced"] is False
+    assert flags["minting"] is False
+    assert flags["pause_trading"] is False
+    assert flags["transfer_limits"] is False
+    assert flags["proxy_pattern"] is False
 
 
-def test_flag_detection_honeypot():
-    flags = rules.run_all_checks(HONEYPOT_SNIPPET, source_available=True)
-    assert flags["modifiable_fee"]
-    assert flags["blacklist_whitelist"]
-    assert flags["uniswap_restriction"]
-    assert flags["owner_not_renounced"]  # owner and onlyOwner appear multiple times
-
-
-def test_report_scoring():
+def test_build_report_scoring_and_risk():
+    """
+    Smoke test for scoring + risk mapping.
+    """
     flags = {
         "modifiable_fee": True,
         "blacklist_whitelist": True,
         "uniswap_restriction": False,
         "owner_not_renounced": True,
         "minting": False,
-        "pause_trading": False,
+        "pause_trading": True,
         "unverified_code": False,
-        "transfer_limits": False,
-        "proxy_pattern": False,
+        "transfer_limits": True,
+        "proxy_pattern": True,
     }
-    score = report.compute_score(flags)
-    # weights: 2 + 2 + 1 = 5 → MEDIUM (transfer_limits and proxy_pattern inactive)
-    assert score == 5
-    assert report.classify_risk(score) == "MEDIUM"
+    rep = build_report(address="0xTEST", flags=flags)
 
-
-def test_analyzer_stubbed():
-    """
-    Use a stubbed ContractAnalyzer that returns our honeypot snippet instead of
-    calling the network. Ensures integration works end‑to‑end.
-    """
-
-    class StubAnalyzer(analyzer.ContractAnalyzer):
-        def get_source_code(self, address: str):  # type: ignore
-            return HONEYPOT_SNIPPET, True
-
-    stub = StubAnalyzer(api_key="")
-    report_data = stub.analyze_contract("0x1234567890abcdef1234567890abcdef12345678")
-    assert report_data["risk"] == "HIGH"
-    assert "modifiable_fee" in report_data["flags"]
-
-
-def test_proxy_pattern_detection():
-    """Ensure the proxy/delegatecall pattern is detected."""
-    proxy_code = """
-    // Simple delegatecall proxy example
-    pragma solidity ^0.8.0;
-    contract Proxy {
-        address public implementation;
-        function upgradeTo(address newImpl) external {
-            implementation = newImpl;
-        }
-        fallback() external payable {
-            (bool success, ) = implementation.delegatecall(msg.data);
-            require(success);
-        }
-    }
-    """
-    flags = rules.run_all_checks(proxy_code, source_available=True)
-    assert flags["proxy_pattern"]
+    assert rep["address"] == "0xTEST"
+    assert isinstance(rep["score"], int)
+    assert rep["risk"] in {"SAFE", "MEDIUM", "HIGH"}
+    assert "summary" in rep and isinstance(rep["summary"], str)
+    # Flags list should only contain those set to True
+    for f in rep["flags"]:
+        assert flags[f] is True

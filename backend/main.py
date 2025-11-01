@@ -5,19 +5,22 @@ It exposes a FastAPI application with a single endpoint `/analyze`
 and also supports execution as a standalone CLI tool.
 
 Usage examples:
-    # 1️⃣ Lancer le serveur API (mode dev)
+    # 1️⃣ Start the API server (dev)
     uvicorn backend.main:app --reload
 
-    # 2️⃣ Analyser un contrat depuis le terminal
+    # 2️⃣ Analyze a contract from the terminal
     python -m backend.main 0xABCDEF... --chain ethereum
-    # ou plus simple :
+    # or via the thin wrapper:
     ./cli.py 0xABCDEF... --chain bsc
 
 Environment variables:
-    ETHERSCAN_API_KEY – clé API Etherscan (Multi-chain V2)
+    ETHERSCAN_API_KEY     – API key for Etherscan (also used as fallback)
+    BSCSCAN_API_KEY       – optional (if absent, ETHERSCAN_API_KEY is reused)
+    POLYGONSCAN_API_KEY   – optional (if absent, ETHERSCAN_API_KEY is reused)
 """
 
 from __future__ import annotations
+
 import sys
 import json
 import argparse
@@ -27,7 +30,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, constr
 from colorama import Fore, Style, init as color_init
 
-# Optionnel : support .env local
+# Optional: load .env for local dev
 try:
     from dotenv import load_dotenv  # type: ignore
     load_dotenv()
@@ -38,7 +41,7 @@ from backend.analyzer import ContractAnalyzer
 
 
 # ----------------------------- #
-#   ⚙️  FastAPI Initialisation
+#   ⚙️  FastAPI Initialization
 # ----------------------------- #
 
 class AnalyzeRequest(BaseModel):
@@ -63,6 +66,7 @@ async def analyze(request: AnalyzeRequest) -> Any:
         analyzer = ContractAnalyzer(chain=chain)
         report_data = analyzer.analyze_contract(address)
     except ValueError as ve:
+        # invalid address / unsupported chain, etc.
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erreur interne: {exc}")
@@ -70,7 +74,7 @@ async def analyze(request: AnalyzeRequest) -> Any:
 
 
 # ----------------------------- #
-#   🧠  Mode CLI (terminal)
+#   🧠  CLI Mode
 # ----------------------------- #
 
 def _cli_print_report(report_data: dict) -> None:
@@ -80,25 +84,33 @@ def _cli_print_report(report_data: dict) -> None:
         "SAFE": Fore.GREEN,
         "MEDIUM": Fore.YELLOW,
         "HIGH": Fore.RED,
-    }.get(report_data["risk"], Fore.WHITE)
+    }.get(report_data.get("risk", ""), Fore.WHITE)
 
-    print(f"\nContract: {report_data['address']}")
-    print(f"Score: {report_data['score']}/10")
-    print(f"Risk: {risk_color}{report_data['risk']}{Style.RESET_ALL}")
+    print(f"\nContract: {report_data.get('address')}")
+    print(f"Score: {report_data.get('score')}/10")
+    print(f"Risk: {risk_color}{report_data.get('risk')}{Style.RESET_ALL}")
 
-    if report_data.get("flags"):
+    flags = report_data.get("flags") or []
+    if flags:
         print("Flags:")
-        for flag in report_data["flags"]:
+        for flag in flags:
             print(f"  - {flag}")
-    print(f"Summary: {report_data['summary']}\n")
+    print(f"Summary: {report_data.get('summary')}\n")
 
 
-def cli():
+def cli() -> None:
     """Entrée principale pour le CLI (utilisé par cli.py)."""
-    parser = argparse.ArgumentParser(description="Analyse un contrat ERC-20 pour détecter les honeypots.")
+    parser = argparse.ArgumentParser(
+        description="Analyse un contrat ERC-20 pour détecter les honeypots."
+    )
     parser.add_argument("address", help="Adresse du contrat à analyser")
-    parser.add_argument("--chain", choices=["ethereum", "bsc", "polygon"], default="ethereum", help="Blockchain cible")
-    parser.add_argument("--out", type=str, help="Sauvegarde le rapport au format JSON")
+    parser.add_argument(
+        "--chain",
+        choices=["ethereum", "bsc", "polygon"],
+        default="ethereum",
+        help="Blockchain cible",
+    )
+    parser.add_argument("--out", type=str, help="Sauvegarde le rapport en JSON")
     args = parser.parse_args()
 
     try:
