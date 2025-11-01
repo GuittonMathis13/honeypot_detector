@@ -1,0 +1,14 @@
+{
+  "address": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+  "score": 9,
+  "risk": "HIGH",
+  "flags": [
+    "modifiable_fee",
+    "blacklist_whitelist",
+    "uniswap_restriction",
+    "owner_not_renounced",
+    "minting",
+    "pause_trading"
+  ],
+  "summary": "Contract allows tax or fee parameters to be modified by privileged accounts. Contract contains blacklist/whitelist or transfer restrictions that can block users. Contract restricts selling via the liquidity pool (potential honeypot). Ownership is active and `onlyOwner` functions exist without renunciation. Mint function detected – supply can be increased at will. Trading can be paused or resumed by the owner."
+}

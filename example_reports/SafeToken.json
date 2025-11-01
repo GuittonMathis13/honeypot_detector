@@ -1,0 +1,7 @@
+{
+  "address": "0x1234567890abcdef1234567890abcdef12345678",
+  "score": 0,
+  "risk": "SAFE",
+  "flags": [],
+  "summary": "No obvious red flags detected in the contract source."
+}

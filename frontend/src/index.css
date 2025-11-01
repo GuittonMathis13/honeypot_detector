@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for the Honeypot Detector */
+body {
+  @apply font-sans text-gray-900;
+}
