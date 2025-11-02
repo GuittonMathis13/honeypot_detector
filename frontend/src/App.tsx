@@ -1,182 +1,163 @@
-import React, { useState, useEffect } from 'react';
-import { analyzeToken } from './api';
-import ReportCard from './components/ReportCard';
+import React, { useMemo, useState } from "react";
+import Spinner from "./components/Spinner";
+import ReportCard from "./components/ReportCard";
+import { analyzeToken } from "./api";
 
-interface AnalysisResult {
+type Saved = {
+  when: string; // ISO
   address: string;
-  score: number;
-  risk: string;
-  flags: string[];
-  summary: string;
-}
+  chain: string;
+  report: any;
+};
 
-/**
- * Composant principal de l’interface.
- *
- * Permet à l’utilisateur d’entrer une adresse de contrat, lance l’analyse via l’API
- * et affiche les résultats. Gère également un historique local des analyses précédentes.
- */
-const App: React.FC = () => {
-  const [address, setAddress] = useState('');
-  const [network, setNetwork] = useState('ethereum');
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [history, setHistory] = useState<AnalysisResult[]>([]);
+export default function App() {
+  const [address, setAddress] = useState("");
+  const [chain, setChain] = useState<"ethereum"|"bsc"|"polygon">("ethereum");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]   = useState<string | null>(null);
+  const [report, setReport] = useState<any | null>(null);
 
-  // Charger l’historique depuis localStorage au montage
-  useEffect(() => {
-    const stored = localStorage.getItem('hp_history');
-    if (stored) {
+  const [history, setHistory] = useState<Saved[]>(
+    () => {
       try {
-        const parsed: AnalysisResult[] = JSON.parse(stored);
-        setHistory(parsed);
-      } catch {
-        // ignore JSON parse error
-      }
+        const raw = localStorage.getItem("hpdetector:history");
+        return raw ? JSON.parse(raw) : [];
+      } catch { return []; }
     }
-  }, []);
+  );
 
-  // Met à jour localStorage lorsqu’on modifie l’historique
-  useEffect(() => {
-    localStorage.setItem('hp_history', JSON.stringify(history));
-  }, [history]);
+  const canSubmit = useMemo(() => address.trim().startsWith("0x") && address.trim().length === 42, [address]);
 
-  const handleAnalyze = async () => {
-    // Validation simple de l’adresse
-    const trimmed = address.trim();
-    if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
-      setError('Adresse de contrat invalide');
-      setResult(null);
-      return;
-    }
+  function saveHistory(entry: Saved) {
+    const next = [entry, ...history].slice(0, 5);
+    setHistory(next);
+    localStorage.setItem("hpdetector:history", JSON.stringify(next));
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
     setError(null);
     setLoading(true);
+    setReport(null);
     try {
-      const res = await analyzeToken(trimmed, network);
-      setResult(res);
-      // Ajoute au début de l’historique, en supprimant les doublons
-      setHistory((prev) => {
-        const filtered = prev.filter((item) => item.address.toLowerCase() !== res.address.toLowerCase());
-        const updated = [res, ...filtered];
-        return updated.slice(0, 3);
-      });
+      const rep = await analyzeToken(address.trim(), chain);
+      setReport(rep);
+      saveHistory({ when: new Date().toISOString(), address: address.trim(), chain, report: rep });
     } catch (err: any) {
-      setError(err.message);
-      setResult(null);
+      setError(err.message ?? "Erreur inconnue");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const handleHistoryClick = (item: AnalysisResult) => {
-    setResult(item);
-    setAddress(item.address);
-    setError(null);
-  };
+  function handleCopy(addr: string) {
+    navigator.clipboard.writeText(addr).catch(() => {});
+  }
 
-  const handleDownload = () => {
-    if (!result) return;
-    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${result.address}_report.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  function handleOpenScan(addr: string) {
+    const map: Record<string, string> = {
+      ethereum: "https://etherscan.io/address/",
+      bsc: "https://bscscan.com/address/",
+      polygon: "https://polygonscan.com/address/",
+    };
+    window.open(`${map[chain]}${addr}`, "_blank");
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10 px-4">
-      <h1 className="text-3xl font-bold text-center mb-8">Honeypot Detector Pro</h1>
-      <div className="max-w-xl mx-auto">
-        {/* Sélection du réseau */}
-        <div className="mb-4">
-          <label htmlFor="network" className="block text-sm font-medium text-gray-700 mb-1">
-            Réseau
-          </label>
-          <select
-            id="network"
-            value={network}
-            onChange={(e) => setNetwork(e.target.value)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="ethereum">Ethereum</option>
-            <option value="bsc">Binance Smart Chain</option>
-            <option value="polygon">Polygon</option>
-          </select>
+    <div className="min-h-full text-slate-100">
+      <header className="px-6 py-5">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Honeypot Detector Pro</h1>
+          <div className="text-xs text-slate-400">v1.0 • Dark-Ops</div>
         </div>
-        <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
-          Adresse du contrat
-        </label>
-        <div className="flex items-center space-x-2">
-          <input
-            id="address"
-            type="text"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="flex-grow border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="0x..."
-          />
-          <button
-            onClick={handleAnalyze}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
-            disabled={loading}
-          >
-            Analyser
-          </button>
-        </div>
-        {error && <p className="text-red-600 mt-2">{error}</p>}
-        {loading && <p className="mt-4 text-gray-600 animate-pulse">Analyse en cours...</p>}
-      </div>
-      {/* Historique des scans */}
-      {history.length > 0 && (
-        <div className="max-w-xl mx-auto mt-8">
-          <h3 className="font-semibold mb-2">Historique des analyses</h3>
-          <ul className="space-y-2 mb-3">
-            {history.map((item) => (
-              <li
-                key={item.address}
-                className="p-3 border rounded-md bg-white hover:bg-gray-100 cursor-pointer flex justify-between"
-                onClick={() => handleHistoryClick(item)}
-              >
-                <span className="truncate" title={item.address}>{item.address}</span>
-                <span className="font-medium">
-                  {item.score} / 10
-                </span>
-              </li>
-            ))}
-          </ul>
-          <button
-            onClick={() => setHistory([])}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            Effacer l’historique
-          </button>
-        </div>
-      )}
-      {/* Résultat d’analyse */}
-      {result && !loading && (
-        <div className="max-w-2xl mx-auto mt-8">
-          <ReportCard
-            address={result.address}
-            score={result.score}
-            risk={result.risk}
-            flags={result.flags}
-            summary={result.summary}
-          />
-          <div className="text-right mt-4">
-            <button
-              onClick={handleDownload}
-              className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
-            >
-              Télécharger le rapport JSON
+      </header>
+
+      <main className="px-6 pb-12">
+        <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-6">
+          <section className="md:col-span-2 card p-5">
+            <form onSubmit={onSubmit} className="space-y-4">
+              <div className="grid sm:grid-cols-5 gap-3">
+                <div className="sm:col-span-4">
+                  <label className="text-sm muted">Adresse du contrat</label>
+                  <input
+                    className="input mt-1"
+                    placeholder="0x…"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <label className="text-sm muted">Réseau</label>
+                  <select
+                    className="input mt-1"
+                    value={chain}
+                    onChange={(e) => setChain(e.target.value as any)}
+                  >
+                    <option value="ethereum">Ethereum</option>
+                    <option value="bsc">BSC</option>
+                    <option value="polygon">Polygon</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button className="btn" disabled={!canSubmit || loading}>
+                  {loading ? <Spinner /> : "Analyser"}
+                </button>
+                {!canSubmit && <span className="text-xs text-rose-300">Adresse invalide</span>}
+              </div>
+            </form>
+
+            {error && (
+              <div className="mt-4 border border-rose-700 bg-rose-900/20 rounded-xl px-4 py-3 text-sm">
+                {error}
+              </div>
+            )}
+
+            {loading && !error && (
+              <div className="mt-6 card p-6">
+                <div className="flex items-center gap-3">
+                  <Spinner />
+                  <div>
+                    <div className="font-medium">Analyse en cours…</div>
+                    <div className="muted text-sm">Contact du backend et exécution des heuristiques</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {report && !loading && !error && (
+              <div className="mt-6">
+                <ReportCard report={report} onCopy={handleCopy} onOpenScan={handleOpenScan} />
+              </div>
+            )}
+          </section>
+
+          <aside className="card p-5">
+            <h3 className="text-sm font-semibold mb-3">Historique (5 derniers)</h3>
+            <div className="space-y-3">
+              {history.length ? history.map((h, i) => (
+                <div key={i} className="rounded-xl border border-slate-800 p-3 bg-slate-900/60">
+                  <div className="text-xs muted">{new Date(h.when).toLocaleString()}</div>
+                  <div className="text-sm font-mono truncate">{h.address}</div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button className="btn text-xs" onClick={() => {
+                      setAddress(h.address); setChain(h.chain as any); setReport(h.report);
+                    }}>Charger</button>
+                    <button className="btn text-xs" onClick={() => navigator.clipboard.writeText(h.address)}>Copier</button>
+                  </div>
+                </div>
+              )) : (
+                <div className="muted text-sm">Aucun historique pour l’instant.</div>
+              )}
+            </div>
+
+            <button className="btn w-full mt-4" onClick={() => { setHistory([]); localStorage.removeItem("hpdetector:history"); }}>
+              Effacer l’historique
             </button>
-          </div>
+          </aside>
         </div>
-      )}
+      </main>
     </div>
   );
-};
-
-export default App;
+}

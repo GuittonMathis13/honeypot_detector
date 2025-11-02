@@ -1,99 +1,96 @@
 """
-report.py
-This module provides functionality to transform raw flag data produced by
-`rules.run_all_checks` into a human‑readable risk score, category and
-summary. The scoring heuristic weights certain flags more heavily based
-on the prevalence and severity of honeypot behaviour reported in
-industry resources【933481489912976†L374-L399】. The summary sentences are meant
-to be concise and understandable for non‑technical users.
+report.py — Honeypot Detector Pro (B1.3)
+Builds a weighted score (0–10) and generates a professional summary.
 """
 
 from __future__ import annotations
-from typing import Dict, List, Tuple
+from typing import Dict, Any
 
+# --- 1️⃣ Flag weight mapping (risk intensity) ---
 
-# Assign weights to each flag. Heavier weights indicate higher risk.
-# These values were chosen to produce a score between 0 and 10 for
-# typical combinations of flags; they can be tuned in the future.
-FLAG_WEIGHTS: Dict[str, int] = {
-    "modifiable_fee": 2,
-    "blacklist_whitelist": 2,
+FLAG_WEIGHTS = {
+    # High-risk
+    "owner_not_renounced": 3,
+    "blacklist_whitelist": 3,
     "uniswap_restriction": 3,
-    "owner_not_renounced": 1,
+    "modifiable_fee": 3,
+
+    # Medium-risk
     "minting": 2,
-    "pause_trading": 1,
-    "unverified_code": 3,
+    "pause_trading": 2,
     "transfer_limits": 2,
     "proxy_pattern": 2,
+
+    # Light-risk / informational
+    "max_limits_strict": 1,
+    "dynamic_fees_public": 1,
+    "transfer_trap": 1,
 }
 
-
-# Human‑readable descriptions for each flag used in the summary.
-FLAG_DESCRIPTIONS: Dict[str, str] = {
-    "modifiable_fee": "Contract allows tax or fee parameters to be modified by privileged accounts.",
-    "blacklist_whitelist": "Contract contains blacklist/whitelist or transfer restrictions that can block users.",
-    "uniswap_restriction": "Contract restricts selling via the liquidity pool (potential honeypot).",
-    "owner_not_renounced": "Ownership is active and `onlyOwner` functions exist without renunciation.",
-    "minting": "Mint function detected – supply can be increased at will.",
-    "pause_trading": "Trading can be paused or resumed by the owner.",
-    "unverified_code": "Source code is unverified; logic cannot be audited.",
-    "transfer_limits": "Contract imposes maximum transaction or wallet limits, which can restrict users from selling or transferring.",
-    "proxy_pattern": "Contract uses delegatecall or proxy pattern; logic may be upgraded after deployment.",
-}
+MAX_SCORE = 10
 
 
-def compute_score(flags: Dict[str, bool]) -> int:
-    """Compute a risk score between 0 and 10 from the active flags."""
-    score = 0
-    for flag, active in flags.items():
-        if active:
-            score += FLAG_WEIGHTS.get(flag, 0)
-    # Cap the score at 10
-    return min(score, 10)
-
+# --- 2️⃣ Risk level helper ---
 
 def classify_risk(score: int) -> str:
-    """
-    Convert a numeric score into a qualitative risk category.
-
-    * 0–3 → SAFE
-    * 4–6 → MEDIUM
-    * 7–10 → HIGH
-    """
     if score <= 3:
         return "SAFE"
-    if score <= 6:
+    elif score <= 6:
         return "MEDIUM"
-    return "HIGH"
+    else:
+        return "HIGH"
 
 
-def generate_summary(flags: Dict[str, bool]) -> str:
-    """
-    Build a short textual summary from the active flags. If no flags
-    are active, a benign message is returned.
-    """
-    active_descriptions: List[str] = [
-        desc for flag, desc in FLAG_DESCRIPTIONS.items() if flags.get(flag)
-    ]
-    if not active_descriptions:
-        return "No obvious red flags detected in the contract source."
-    return " ".join(active_descriptions)
+# --- 3️⃣ Human-readable summary builder ---
+
+def build_summary(flags: Dict[str, bool]) -> str:
+    messages = []
+    add = messages.append
+
+    if flags.get("owner_not_renounced"):
+        add("Ownership is active; contract remains under centralised control.")
+    if flags.get("modifiable_fee"):
+        add("Transaction fees or taxes can be modified by privileged addresses.")
+    if flags.get("blacklist_whitelist"):
+        add("Contract includes blacklist/whitelist logic that can block users.")
+    if flags.get("uniswap_restriction"):
+        add("Transfers to liquidity pools may be restricted, blocking sales.")
+    if flags.get("minting"):
+        add("Owner can mint new tokens, increasing supply arbitrarily.")
+    if flags.get("pause_trading"):
+        add("Trading can be paused or resumed by an admin.")
+    if flags.get("transfer_limits"):
+        add("Maximum wallet or transaction limits are enforced.")
+    if flags.get("proxy_pattern"):
+        add("Proxy or delegatecall detected: contract logic can be upgraded.")
+    if flags.get("max_limits_strict"):
+        add("Limits on transactions are extremely low (<2%).")
+    if flags.get("dynamic_fees_public"):
+        add("Public fee variables and setters suggest dynamic taxation.")
+    if flags.get("transfer_trap"):
+        add("Transfer function restricts interactions with the owner address.")
+
+    if not messages:
+        return "No significant risks detected — contract appears safe."
+    return " ".join(messages)
 
 
-def build_report(address: str, flags: Dict[str, bool]) -> Dict[str, object]:
-    """
-    Assemble the final report dictionary from an address and its flags.
-    Includes the computed score, risk category, list of flag names and
-    a human‑readable summary.
-    """
-    score = compute_score(flags)
+# --- 4️⃣ Main builder ---
+
+def build_report(address: str, flags: Dict[str, bool]) -> Dict[str, Any]:
+    score = 0
+    for flag, enabled in flags.items():
+        if enabled:
+            score += FLAG_WEIGHTS.get(flag, 1)
+
+    score = min(score, MAX_SCORE)
     risk = classify_risk(score)
-    summary = generate_summary(flags)
-    active_flags = [flag for flag, active in flags.items() if active]
+    summary = build_summary(flags)
+
     return {
         "address": address,
         "score": score,
         "risk": risk,
-        "flags": active_flags,
+        "flags": [k for k, v in flags.items() if v],
         "summary": summary,
     }

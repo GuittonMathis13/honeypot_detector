@@ -1,6 +1,9 @@
 """
-rules.py
-Heuristic checks on Solidity source to surface common honeypot / rug red flags.
+rules.py — Honeypot Detector Pro (B1.2.8 — Stable Clean)
+Heuristics on Solidity source strings → boolean risk flags.
+
+Cette version garde le HOTFIX qui force owner_not_renounced=True dès que la source est dispo.
+Nettoyée, cohérente et stable pour la suite (B1.3 → scoring & logique raffinée).
 """
 
 from __future__ import annotations
@@ -8,136 +11,124 @@ import re
 from typing import Dict
 
 
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+def _normalize(code: str) -> str:
+    """Minifie et normalise la casse + espaces pour les recherches rapides."""
+    return code.lower().replace(" ", "").replace("\n", "")
+
+
+# ------------------------------------------------------------
+# Core detection rules
+# ------------------------------------------------------------
 def check_modifiable_fee(code: str) -> bool:
-    """
-    Owner/privileged can change fees/taxes.
-    """
-    patterns = [
-        "settax", "setfee", "setfees", "updatetax",
-        "buyfee", "sellfee", "changetax",
-    ]
-    code_lower = code.lower()
-    return any(p in code_lower for p in patterns)
+    s = code.lower()
+    patterns = ["settax", "setfee", "setfees", "updatetax", "buyfee", "sellfee", "changetax"]
+    return any(p in s for p in patterns)
 
 
 def check_blacklist_whitelist(code: str) -> bool:
-    """
-    Black/white list or similar user restrictions.
-    """
-    patterns = [
-        "blacklist", "whitelist", "setmaxtx", "maxwallet",
-        "banuser", "blocklist", "removeliquidity",
-    ]
-    code_lower = code.lower()
-    return any(p in code_lower for p in patterns)
+    s = code.lower()
+    patterns = ["blacklist", "whitelist", "blocklist", "banuser", "setmaxtx", "maxwallet", "removeliquidity"]
+    return any(p in s for p in patterns)
 
+
+_UNISWAP_PAIR_RE = re.compile(r"require\s*\(\s*(?:_?to)\s*!=\s*([a-zA-Z_]\w*)\s*[,)]", re.IGNORECASE)
 
 def check_uniswap_restriction(code: str) -> bool:
-    """
-    Block sells by forbidding transfers to LP/pair/uniswap.
-    Robust against custom var names (pair, lpPair, uPair, etc).
-    We normalize by removing spaces and lowercasing.
-    """
-    norm = re.sub(r"\s+", "", code.lower())
-
-    # Patterns like: require(to!=uniswapV2Pair), require(_to != pair), require(recipient != lpPair)
-    # - look for 'require(' ... (to|_to|recipient) ... '!=' ... (uniswap*|*pair*)
-    pat = re.compile(
-        r"require\([^)]*(?:to|_to|recipient)[^!]*!=[^)]*(?:uniswap[a-z0-9_]*|[a-z0-9_]*pair[a-z0-9_]*)",
-        re.IGNORECASE,
-    )
-    return bool(pat.search(norm))
-
-
-def check_owner_functions(code: str) -> bool:
-    """
-    Centralized control: many onlyOwner restrictions and no renounceOwnership.
-    - Count real 'onlyOwner' modifier occurrences (word boundary)
-    - If 'renounceOwnership' (or similar) is present, we consider potential mitigation
-    """
-    code_lower = code.lower()
-    only_owner_count = len(re.findall(r"\bonlyowner\b", code_lower))
-    has_renounce = "renounceownership" in code_lower or "renounceowner" in code_lower
-    has_owner_function = "function owner" in code_lower or "owner()" in code_lower
-
-    # Keep similar threshold but with real modifier detection
-    return (only_owner_count > 2 and not has_renounce) or (has_owner_function and not has_renounce)
+    compact = _normalize(code)
+    if any(q in compact for q in ["require(to!=uniswap", "to!=uniswappair", "to!=uniswapv2pair"]):
+        return True
+    for m in _UNISWAP_PAIR_RE.finditer(code):
+        if "pair" in m.group(1).lower():
+            return True
+    return False
 
 
 def check_minting(code: str) -> bool:
-    """
-    Hidden supply increase.
-    """
-    code_lower = code.lower()
-    return "_mint(" in code_lower or "function mint" in code_lower
+    s = code.lower()
+    return "_mint(" in s or "function mint" in s
 
 
 def check_pause_trading(code: str) -> bool:
-    """
-    Ability to halt trading (Pausable or equivalents).
-    - Detect OZ Pausable (import / inheritance)
-    - Detect common functions/vars: pause, unpause, tradingOpen, tradingEnabled, setTrading, enableTrading
-    """
-    cl = code.lower()
-    pausable_signals = [
-        "import '@openzeppelin/contracts/security/pausable'",
-        'import "@openzeppelin/contracts/security/pausable"',
-        " is pausable",
-    ]
-    func_signals = [
-        "pausetrading", "pause()", "unpause()", "pause", "unpause",
-        "settrading", "enabletrading",
-        "tradingopen", "tradingenabled",  # vars frequently used
-    ]
-    return any(s in cl for s in pausable_signals) or any(s in cl for s in func_signals)
+    s = code.lower()
+    pausable = ["whennotpaused", "whenpaused", "paused()", "pausable"]
+    trading = ["pausetrading", "settrading", "enabletrading", "tradingopen", "opentrading"]
+    return any(p in s for p in pausable + trading)
 
 
 def check_proxy_pattern(code: str) -> bool:
-    """
-    Proxy/upgradeability hints.
-    """
-    code_lower = code.lower().replace(" ", "")
-    patterns = [
-        "delegatecall(",
-        "eip1967",
-        "implementation",
-        "proxy",
-    ]
-    return any(p in code_lower for p in patterns)
+    compact = _normalize(code)
+    return any(p in compact for p in ["delegatecall(", "eip1967", "implementation", "proxy"])
 
 
 def check_transfer_limits(code: str) -> bool:
-    """
-    Max tx / max wallet constraints (basic detection).
-    """
-    code_lower = code.lower()
-    patterns = [
-        "setmaxtx", "maxtx", "maxwallet", "maxwalletsize",
-        "maxsell", "maxbuy", "maxtransactionamount", "maxtransaction",
-    ]
-    return any(p in code_lower for p in patterns)
+    s = code.lower()
+    patterns = ["setmaxtx", "maxtx", "maxwallet", "maxwalletsize", "maxsell", "maxbuy", "maxtransactionamount", "maxtransaction"]
+    return any(p in s for p in patterns)
 
 
 def check_unverified_code(source_code: str) -> bool:
-    """
-    True if no verified source was found.
-    """
     return not source_code or len(source_code.strip()) == 0
 
 
+# ------------------------------------------------------------
+# B1.2 extended rules
+# ------------------------------------------------------------
+def check_max_limits_strict(code: str) -> bool:
+    s = code.lower()
+    for m in re.finditer(r"max\w*percent\s*=\s*(\d{1,2})", s):
+        try:
+            if int(m.group(1)) <= 2:
+                return True
+        except Exception:
+            pass
+    if ("maxwalletpercent" in s or "maxtxpercent" in s) and re.search(r"(max\w*percent)[^;]{0,80}=\s*[12]\b", s):
+        return True
+    return False
+
+
+def check_dynamic_fees_public(code: str) -> bool:
+    s = code.lower()
+    has_public_fee = bool(re.search(r"\b(?:u?int(?:256)?)\s+public\s+\w*(?:fee|tax)\w*", s))
+    has_setter = any(k in s for k in ("setfee", "setfees", "settax", "updatetax"))
+    return has_public_fee and has_setter
+
+
+def check_transfer_trap(code: str) -> bool:
+    compact = _normalize(code)
+    patterns = [
+        "require(from!=owner", "require(_from!=owner",
+        "require(to!=owner", "require(_to!=owner",
+        "require(from==owner", "require(_from==owner",
+        "require(to==owner", "require(_to==owner",
+    ]
+    return any(p in compact for p in patterns)
+
+
+# ------------------------------------------------------------
+# Main dispatcher
+# ------------------------------------------------------------
 def run_all_checks(code: str, source_available: bool) -> Dict[str, bool]:
-    """
-    Run all checks and return flag dict.
-    """
+    """Run all heuristic checks and return boolean flags."""
     flags = {
         "modifiable_fee": check_modifiable_fee(code) if source_available else False,
         "blacklist_whitelist": check_blacklist_whitelist(code) if source_available else False,
         "uniswap_restriction": check_uniswap_restriction(code) if source_available else False,
-        "owner_not_renounced": check_owner_functions(code) if source_available else False,
+
+        # 🔒 HOTFIX : tant qu’on n’a pas de détection renounceOwnership stable, on force True
+        "owner_not_renounced": True if source_available else False,
+
         "minting": check_minting(code) if source_available else False,
         "pause_trading": check_pause_trading(code) if source_available else False,
         "unverified_code": check_unverified_code(code) if not source_available else False,
         "transfer_limits": check_transfer_limits(code) if source_available else False,
         "proxy_pattern": check_proxy_pattern(code) if source_available else False,
+
+        # Extended B1.2
+        "max_limits_strict": check_max_limits_strict(code) if source_available else False,
+        "dynamic_fees_public": check_dynamic_fees_public(code) if source_available else False,
+        "transfer_trap": check_transfer_trap(code) if source_available else False,
     }
     return flags
