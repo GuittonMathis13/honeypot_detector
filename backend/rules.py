@@ -1,9 +1,12 @@
 """
-rules.py — Honeypot Detector Pro (B1.2.8 — Stable Clean)
-Heuristics on Solidity source strings → boolean risk flags.
+    rules.py — Honeypot Detector Pro (B1.3 — Clean)
+    Heuristics on Solidity source strings → boolean risk flags.
 
-Cette version garde le HOTFIX qui force owner_not_renounced=True dès que la source est dispo.
-Nettoyée, cohérente et stable pour la suite (B1.3 → scoring & logique raffinée).
+    Changement clé : suppression du HOTFIX qui forçait owner_not_renounced=True.
+    On implémente une vraie détection :
+      - Présence d’owner/onlyOwner => contrôle possible
+      - Si renounceOwnership() ou transferOwnership(address(0)) détectés => on NE
+        déclenche PAS le flag owner_not_renounced
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ def check_blacklist_whitelist(code: str) -> bool:
 
 
 _UNISWAP_PAIR_RE = re.compile(r"require\s*\(\s*(?:_?to)\s*!=\s*([a-zA-Z_]\w*)\s*[,)]", re.IGNORECASE)
+
 
 def check_uniswap_restriction(code: str) -> bool:
     compact = _normalize(code)
@@ -71,6 +75,31 @@ def check_transfer_limits(code: str) -> bool:
 
 def check_unverified_code(source_code: str) -> bool:
     return not source_code or len(source_code.strip()) == 0
+
+
+# ------------------------------------------------------------
+# Owner / renounce detection
+# ------------------------------------------------------------
+OWNABLE_RE = re.compile(r"\b(?:onlyOwner|owner\s*\()", re.IGNORECASE)
+RENOUNCE_RE = re.compile(r"\brenounceOwnership\s*\(", re.IGNORECASE)
+ZERO_OWNER_SET_RE = re.compile(r"transferOwnership\s*\(\s*address\s*\(\s*0\s*\)\s*\)", re.IGNORECASE)
+
+
+def check_owner_not_renounced(code: str, source_available: bool) -> bool:
+    """
+    True si contrôle 'owner' apparent ET aucun indice crédible de renonciation.
+    False si pas de source, pas d'owner, ou si renonciation détectée.
+    """
+    if not source_available:
+        return False
+    s = code
+    has_owner_controls = bool(OWNABLE_RE.search(s))
+    if not has_owner_controls:
+        return False
+    # Si on voit une renonciation explicite, on ne trigger pas le flag
+    if RENOUNCE_RE.search(s) or ZERO_OWNER_SET_RE.search(s):
+        return False
+    return True
 
 
 # ------------------------------------------------------------
@@ -117,8 +146,8 @@ def run_all_checks(code: str, source_available: bool) -> Dict[str, bool]:
         "blacklist_whitelist": check_blacklist_whitelist(code) if source_available else False,
         "uniswap_restriction": check_uniswap_restriction(code) if source_available else False,
 
-        # 🔒 HOTFIX : tant qu’on n’a pas de détection renounceOwnership stable, on force True
-        "owner_not_renounced": True if source_available else False,
+        # ✅ vraie détection (plus de hotfix forcé)
+        "owner_not_renounced": check_owner_not_renounced(code, source_available),
 
         "minting": check_minting(code) if source_available else False,
         "pause_trading": check_pause_trading(code) if source_available else False,

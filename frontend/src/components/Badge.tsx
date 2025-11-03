@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function Badge({ risk }: { risk: "SAFE"|"MEDIUM"|"HIGH" }) {
+export default function Badge({ risk }: { risk: "SAFE" | "MEDIUM" | "HIGH" }) {
   const map = {
     SAFE: "badge-safe",
     MEDIUM: "badge-medium",

@@ -16,3 +16,27 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.venv*/
+.pytest_cache/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.log
+
+# Env / Secrets
+.env
+.env.*
+frontend/.env*
+!frontend/.env.example
+
+# OS/IDE
+.DS_Store
+.vscode/
+EOF

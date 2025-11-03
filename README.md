@@ -1,155 +1,127 @@
 # Honeypot Detector Pro
 
-Honeypot Detector Pro is a proof-of-concept tool for assessing the risk of
-ERC-20 tokens. It combines a Python back-end with a modern React front-end
-to provide both command-line and web-based analysis capabilities. The goal
-of this project is **not** to guarantee the safety of any token but to
-demonstrate an understanding of how honeypot scams operate and how static
-analysis can surface the most common red flags.
+> **Statut v1.0.0 (POC)** — Outil d’analyse **statique** de tokens ERC-20 (ETH / BSC / Polygon).  
+> Récupère le code source via **Etherscan v2** (avec `chainid`), suit les **proxys** (Implementation), applique des **règles heuristiques**, calcule un **score 0–10** et un **verdict** (SAFE / MEDIUM / HIGH).  
+> Idéal portfolio/screening. Non déterministe à 100 % (dépend des explorers & de la vérification de code).
 
-## Architecture Overview
+---
 
-honeypot_detector/
-├── backend/ # Python analysis API
-│ ├── analyzer.py # fetches code and applies heuristics
-│ ├── rules.py # individual checks for red flags
-│ ├── report.py # scoring and summary generation
-│ ├── main.py # FastAPI app and CLI entry point
-│ └── requirements.txt
-├── frontend/ # React front-end
-│ ├── src/
-│ │ ├── App.tsx # main component
-│ │ ├── api.ts # API helper
-│ │ ├── index.css # Tailwind directives
-│ │ ├── main.tsx # React entry point
-│ │ └── components/
-│ │ └── ReportCard.tsx
-│ ├── package.json
-│ ├── postcss.config.cjs
-│ ├── tailwind.config.cjs
-│ └── vite.config.ts
-├── tests/ # automated unit tests (to be expanded)
-│ └── test_analyzer.py
-├── example_reports/ # sample JSON outputs
-└── README.md # project documentation
+##  Fonctionnalités
 
-## Back-end (Python)
+- **Backend (FastAPI + CLI)**  
+  - Etherscan v2 multi-chain (`chainid` = 1, 56, 137)  
+  - Suivi **Proxy → Implementation** + flag `proxy_pattern`  
+  - Heuristiques : `modifiable_fee`, `blacklist_whitelist`, `uniswap_restriction`, `minting`, `pause_trading`, `transfer_limits`, `dynamic_fees_public`, `transfer_trap`, `max_limits_strict`, `proxy_pattern`, `unverified_code`  
+  - Scoring 0–10 + verdict + résumé
 
-The back-end is built with **FastAPI** for the HTTP API and can also be
-used as a stand-alone command-line tool. It performs the following steps:
+- **Frontend (React / Vite / Tailwind)**  
+  - Input adresse + réseau → appel API  
+  - Loader, rapport, **historique local** (5 derniers), copier adresse, lien explorer
 
-1. **Input validation** – ensures the address looks like a valid Ethereum contract address.
-2. **Source retrieval** – uses direct HTTP calls to the Etherscan-family APIs
-   to obtain the contract’s verified source code (if available). If the
-   source is not verified, this is treated as a red flag.
-3. **Static analysis** – runs a series of heuristics defined in `rules.py` to
-   detect patterns associated with honeypots and rug pulls (editable fees,
-   blacklist/whitelist logic, LP restrictions, paused trading, owner control,
-   proxies, etc.).
-4. **Scoring and summary** – converts the set of detected flags into a 0–10
-   score and a qualitative risk category (SAFE, MEDIUM or HIGH), plus a short summary.
+- **Tests** : règles & scoring (pytest)
 
-The analyser supports multiple chains. By default it targets **Ethereum**, but
-you can specify **BSC** (`bsc`) or **Polygon** (`polygon`) via the `chain` parameter.
-It also detects proxy patterns (e.g. `delegatecall`, `eip1967`, `implementation`).
+---
 
-The API exposes a single POST endpoint at `/analyze` which accepts a JSON
-body of the form `{ "address": "0x...", "chain": "ethereum|bsc|polygon" }` and returns a report:
+##  Stack
 
-```json
-{
-  "address": "0x123...",
-  "score": 7,
-  "risk": "HIGH",
-  "flags": ["modifiable_fee", "blacklist_whitelist", "owner_not_renounced"],
-  "summary": "Contract allows tax or fee parameters to be modified by privileged accounts. Contract contains blacklist/whitelist or transfer restrictions that can block users. Ownership is active and `onlyOwner` functions exist without renunciation."
-}
-CLI
-You can run the same analysis from the command line:
+- **Backend** : Python, FastAPI, Uvicorn, Requests, Pytest  
+- **Frontend** : React 18, Vite, TypeScript, Tailwind, Axios
 
-sh
-Copier le code
-python -m backend.main 0xYourTokenAddress --chain ethereum
-# or via the thin wrapper:
-./cli.py 0xYourTokenAddress --chain bsc --out report.json
-Environment
-The application loads API keys from environment variables (or from a local .env):
+---
 
-ETHERSCAN_API_KEY — used for Ethereum and as a fallback
+## 📦 Structure
+.
+├─ .github/workflows/
+│ ├─ backend.yml
+│ └─ frontend.yml
+├─ backend/
+│ ├─ init.py
+│ ├─ analyzer.py
+│ ├─ main.py
+│ ├─ report.py
+│ ├─ requirements.txt
+│ └─ rules.py
+├─ frontend/
+│ ├─ index.html
+│ ├─ package.json
+│ ├─ vite.config.ts
+│ ├─ postcss.config.cjs
+│ ├─ tailwind.config.cjs
+│ └─ src/...
+├─ example_reports/
+│ ├─ SafeToken.json
+│ └─ ScamToken.json
+├─ tests/
+│ └─ test_analyzer.py
+├─ cli.py
+├─ LICENSE
+├─ README.md
+└─ .gitignore
 
-BSCSCAN_API_KEY — optional
 
-POLYGONSCAN_API_KEY — optional
+---
 
-Example .env:
+## ⚙️ Installation & Lancement
 
-env
-Copier le code
-ETHERSCAN_API_KEY=YOUR_ETHERSCAN_KEY
-BSCSCAN_API_KEY=YOUR_BSCSCAN_KEY
-POLYGONSCAN_API_KEY=YOUR_POLYGON_KEY
-Usage
-Install dependencies:
+### Backend (dev)
 
-sh
-Copier le code
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-Start the API server (development):
+```bash
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 
-sh
-Copier le code
-uvicorn backend.main:app --reload
-Submit a contract for analysis (replace 0x... with a contract address):
+# Clés API (Etherscan v2)
+export ETHERSCAN_API_KEY="xxxxx"     # couvre multi-chain en v2
+export BSCSCAN_API_KEY="(optionnel)"
+export POLYGONSCAN_API_KEY="(optionnel)"
 
-sh
-Copier le code
-curl -X POST http://localhost:8000/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"address":"0x...","chain":"ethereum"}'
-(Optional) Run the CLI:
+uvicorn main:app --reload
+# → http://127.0.0.1:8000
 
-sh
-Copier le code
-python -m backend.main 0xYourTokenAddress --chain ethereum
-./cli.py 0xYourTokenAddress --chain bsc --out report.json
-Front-end (React)
-The front-end is a React single-page application (Vite + TypeScript + Tailwind).
-Features:
+Endpoint
+POST /analyze
+{ "address": "0x...", "chain": "ethereum|bsc|polygon" }
 
-Enter an ERC-20 contract address and trigger the back-end analysis
+CLI (analyse directe)
+cd backend
+python main.py 0xA0b8... --chain ethereum
 
-Select target chain (Ethereum / BSC / Polygon)
-
-See the score and risk category (progress bar + icons)
-
-Review the detected red flags with tooltips
-
-Local history of the last 3 analyses (stored in localStorage)
-
-Download the JSON report
-
-During development, Vite proxies /analyze to the FastAPI server on port 8000.
-
-Run the front-end:
-
-sh
-Copier le code
+Frontend (dev)
 cd frontend
 npm install
 npm run dev
-# open http://localhost:5173
-For production, you can either serve the built assets from a static host, or mount the
-React build via FastAPI (future work).
+# → http://localhost:5173
 
 Tests
-The tests/ directory contains examples for unit tests of the analysis logic.
-They rely on stubbing/mocking calls so tests don’t require real API keys.
+pytest -v --maxfail=1 --disable-warnings
+
+Scoring (rappel)
+
+Poids par drapeau (simplifié) — report.py :
+
+fort : blacklist/whitelist, dynamic fees + setters, transfer limits, transfer trap
+
+moyen : proxy_pattern, minting, pause trading
+
+faible : max_limits_strict
+
+bonus : unverified_code si aucun code source
+
+Un stablecoin peut sortir HIGH (centralisation : pause/blacklist/owner).
+Ce n’est pas “scam automatique”, c’est un risque de contrôle.
+
+Roadmap courte
+
+Catégories de risque (Centralisation / Tokenomics / Suspicious) dans la réponse JSON
+
+Renonciation “réelle” (events + storage, Ownable/Ownable2Step)
+
+Bytecode fallback (web3.py) si pas de source
+
+Checks DeFi/LP (verrouillage, owner du pair)
+
+Cache + retries pour limiter unverified_code (quota/ratés explorer)
 
 Disclaimer
-This project is provided for educational purposes and should not be considered
-financial advice. Always perform your own due diligence before interacting with tokens.
-
-
-
+Outil d’analyse statique à but éducatif.
+Ne constitue pas un conseil financier. Vérifiez toujours sur chain/explorer.

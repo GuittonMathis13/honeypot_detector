@@ -1,23 +1,23 @@
 """
-main.py
-Entry point for the Honeypot Detector Pro backend.
-It exposes a FastAPI application with a single endpoint `/analyze`
-and also supports execution as a standalone CLI tool.
+    main.py
+    Entry point for the Honeypot Detector Pro backend.
+    It exposes a FastAPI application with a single endpoint `/analyze`
+    and also supports execution as a standalone CLI tool.
 
-Usage examples:
-    # 1️⃣ Start the API server (dev)
-    uvicorn backend.main:app --reload
+    Usage examples:
+        # 1️⃣ Start the API server (dev)
+        uvicorn backend.main:app --reload
 
-    # 2️⃣ Analyze a contract from the terminal
-    python -m backend.main 0xABCDEF... --chain ethereum
-    # or via the thin wrapper:
-    ./cli.py 0xABCDEF... --chain bsc
+        # 2️⃣ Analyze a contract from the terminal
+        python -m backend.main 0xABCDEF... --chain ethereum
+        # or via the thin wrapper:
+        ./cli.py 0xABCDEF... --chain bsc
 
-Environment variables:
-    ETHERSCAN_API_KEY     – API key for Etherscan (also used as fallback)
-    BSCSCAN_API_KEY       – optional (if absent, ETHERSCAN_API_KEY is reused)
-    POLYGONSCAN_API_KEY   – optional (if absent, ETHERSCAN_API_KEY is reused)
-"""
+    Environment variables:
+        ETHERSCAN_API_KEY     – API key for Etherscan (also used as fallback)
+        BSCSCAN_API_KEY       – optional (if absent, ETHERSCAN_API_KEY is reused)
+        POLYGONSCAN_API_KEY   – optional (if absent, ETHERSCAN_API_KEY is reused)
+    """
 
 from __future__ import annotations
 
@@ -39,10 +39,10 @@ except Exception:
 
 from backend.analyzer import ContractAnalyzer
 
-
 # ----------------------------- #
 #   ⚙️  FastAPI Initialization
 # ----------------------------- #
+
 
 class AnalyzeRequest(BaseModel):
     address: constr(strip_whitespace=True)
@@ -74,8 +74,9 @@ async def analyze(request: AnalyzeRequest) -> Any:
 
 
 # ----------------------------- #
-#   🧠  CLI Mode
+#     CLI Mode
 # ----------------------------- #
+
 
 def _cli_print_report(report_data: dict) -> None:
     """Affiche joliment le rapport dans le terminal (avec couleurs)."""
@@ -125,7 +126,7 @@ def cli() -> None:
         try:
             with open(args.out, "w", encoding="utf-8") as f:
                 json.dump(report_data, f, indent=2)
-            print(f"📁 Rapport sauvegardé dans {args.out}")
+            print(f" Rapport sauvegardé dans {args.out}")
         except Exception as exc:
             print(f"⚠️  Erreur lors de la sauvegarde: {exc}")
 
