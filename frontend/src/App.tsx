@@ -12,21 +12,24 @@ type Saved = {
 
 export default function App() {
   const [address, setAddress] = useState("");
-  const [chain, setChain] = useState<"ethereum"|"bsc"|"polygon">("ethereum");
+  const [chain, setChain] = useState<"ethereum" | "bsc" | "polygon">("ethereum");
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<any | null>(null);
 
-  const [history, setHistory] = useState<Saved[]>(
-    () => {
-      try {
-        const raw = localStorage.getItem("hpdetector:history");
-        return raw ? JSON.parse(raw) : [];
-      } catch { return []; }
+  const [history, setHistory] = useState<Saved[]>(() => {
+    try {
+      const raw = localStorage.getItem("hpdetector:history");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
     }
-  );
+  });
 
-  const canSubmit = useMemo(() => address.trim().startsWith("0x") && address.trim().length === 42, [address]);
+  const canSubmit = useMemo(
+    () => address.trim().startsWith("0x") && address.trim().length === 42,
+    [address],
+  );
 
   function saveHistory(entry: Saved) {
     const next = [entry, ...history].slice(0, 5);
@@ -136,23 +139,40 @@ export default function App() {
           <aside className="card p-5">
             <h3 className="text-sm font-semibold mb-3">Historique (5 derniers)</h3>
             <div className="space-y-3">
-              {history.length ? history.map((h, i) => (
-                <div key={i} className="rounded-xl border border-slate-800 p-3 bg-slate-900/60">
-                  <div className="text-xs muted">{new Date(h.when).toLocaleString()}</div>
-                  <div className="text-sm font-mono truncate">{h.address}</div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <button className="btn text-xs" onClick={() => {
-                      setAddress(h.address); setChain(h.chain as any); setReport(h.report);
-                    }}>Charger</button>
-                    <button className="btn text-xs" onClick={() => navigator.clipboard.writeText(h.address)}>Copier</button>
+              {history.length ? (
+                history.map((h, i) => (
+                  <div key={i} className="rounded-xl border border-slate-800 p-3 bg-slate-900/60">
+                    <div className="text-xs muted">{new Date(h.when).toLocaleString()}</div>
+                    <div className="text-sm font-mono truncate">{h.address}</div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        className="btn text-xs"
+                        onClick={() => {
+                          setAddress(h.address);
+                          setChain(h.chain as any);
+                          setReport(h.report);
+                        }}
+                      >
+                        Charger
+                      </button>
+                      <button className="btn text-xs" onClick={() => navigator.clipboard.writeText(h.address)}>
+                        Copier
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )) : (
+                ))
+              ) : (
                 <div className="muted text-sm">Aucun historique pour l’instant.</div>
               )}
             </div>
 
-            <button className="btn w-full mt-4" onClick={() => { setHistory([]); localStorage.removeItem("hpdetector:history"); }}>
+            <button
+              className="btn w-full mt-4"
+              onClick={() => {
+                setHistory([]);
+                localStorage.removeItem("hpdetector:history");
+              }}
+            >
               Effacer l’historique
             </button>
           </aside>

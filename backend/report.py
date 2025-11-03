@@ -1,7 +1,7 @@
 """
-report.py — Honeypot Detector Pro (B1.3)
-Builds a weighted score (0–10) and generates a professional summary.
-"""
+    report.py — Honeypot Detector Pro (B1.3)
+    Builds a weighted score (0–10) and generates a professional summary.
+    """
 
 from __future__ import annotations
 from typing import Dict, Any
@@ -28,7 +28,6 @@ FLAG_WEIGHTS = {
 }
 
 MAX_SCORE = 10
-
 
 # --- 2️⃣ Risk level helper ---
 

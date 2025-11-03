@@ -1,10 +1,11 @@
 """
-analyzer.py — core analysis logic (Etherscan API v2, multichain via chainid)
+    analyzer.py — core analysis logic (Etherscan API v2, multichain via chainid)
 
-- Utilise UN SEUL endpoint: https://api.etherscan.io/v2/api
-- Passe la chaîne via ?chainid=1|56|137 (Ethereum/BSC/Polygon)
-- Suivi des proxys (Proxy/Implementation) + flag proxy_pattern
-- Parsing robuste: result peut être list/dict; fallback si message contient du code
+    - Utilise UN SEUL endpoint: https://api.etherscan.io/v2/api
+    - Passe la chaîne via ?chainid=1|56|137 (Ethereum/BSC/Polygon)
+    - Suivi des proxys (Proxy/Implementation) + flag proxy_pattern
+    - Parsing robuste: result peut être list/dict; fallback si message contient
+      du code
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from . import rules
 from . import report
 
 HDP_DEBUG = os.getenv("HDP_DEBUG") == "1"
+
 
 class ContractAnalyzer:
     """
@@ -41,7 +43,7 @@ class ContractAnalyzer:
         self.chain = chain
         self.chain_id = self.CHAIN_IDS[chain]
 
-        # On privilégie une clé dédiée à la chaîne si l’utilisateur en met une,
+        # On privilégie une clé dédiée à la chaîne si dispo,
         # sinon on prend ETHERSCAN_API_KEY (clé V2 multichaîne).
         env_key_name = {
             "ethereum": "ETHERSCAN_API_KEY",
@@ -79,7 +81,7 @@ class ContractAnalyzer:
           { "status":"1","message":"OK","result":[{...}] }  (souvent list)
         Parfois `result` est un dict. On supporte les deux.
         Si `result` est vide mais `message` contient clairement du code,
-        on considère `message` comme source (fallback observé dans ton curl).
+        on considère `message` comme source (fallback).
         """
         status = str(data.get("status", "0"))
         if status != "1":
@@ -101,7 +103,6 @@ class ContractAnalyzer:
         if not source:
             # Fallback: parfois v2 renvoie du code directement dans "message"
             msg = (data.get("message") or "").strip()
-            # heuristique très simple pour détecter un blob de solidity
             if any(x in msg for x in ("pragma solidity", "contract ", "library ", "interface ")):
                 source = msg
 
@@ -112,25 +113,26 @@ class ContractAnalyzer:
             "module": "contract",
             "action": "getsourcecode",
             "address": address,
-            "chainid": self.chain_id,
-            "apikey": self.api_key,
+            "chainid": self.chain_id,   # ← INDISPENSABLE en v2
+            "apikey": self.api_key,     # ← clé v2 (multi-chaîne possible)
         }
         data = self._http_get(params)
         if not data:
             return "", False
 
-        # Cas clés invalides etc.
+        # Cas clés invalides, quotas, etc.
         if str(data.get("status", "0")) != "1":
-            # essayer de ressortir un message utile si présent
             result_msg = data.get("result")
             msg = result_msg if isinstance(result_msg, str) else data.get("message", "")
             if isinstance(msg, str) and "invalid api" in msg.lower():
                 raise ValueError(f"Invalid API key for chain {self.chain}: {msg}")
+            if HDP_DEBUG:
+                print(f"[HDP] Non-OK response: {data}")
             return "", False
 
         entry, source = self._extract_entry_and_source(data)
 
-        # Si on n’a pas de source et que c’est un proxy, on suit Implementation
+        # Si pas de source et que c’est un proxy → suivre Implementation
         if (not source) and entry and (
             entry.get("Proxy") == "1" or str(entry.get("IsProxy", "")).lower() in ("1", "true")
         ):

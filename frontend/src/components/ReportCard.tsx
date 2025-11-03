@@ -24,7 +24,11 @@ const FLAG_LABELS: Record<string, string> = {
   transfer_trap: "Piège transfert (owner)",
 };
 
-export default function ReportCard({ report, onCopy, onOpenScan }: {
+export default function ReportCard({
+  report,
+  onCopy,
+  onOpenScan,
+}: {
   report: Report;
   onCopy: (addr: string) => void;
   onOpenScan: (addr: string) => void;
@@ -49,9 +53,11 @@ export default function ReportCard({ report, onCopy, onOpenScan }: {
         <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
           <div
             className={`h-full transition-all ${
-              report.risk === "HIGH" ? "bg-rose-500"
-              : report.risk === "MEDIUM" ? "bg-amber-400"
-              : "bg-emerald-400"
+              report.risk === "HIGH"
+                ? "bg-rose-500"
+                : report.risk === "MEDIUM"
+                ? "bg-amber-400"
+                : "bg-emerald-400"
             }`}
             style={{ width: `${pct}%` }}
           />
@@ -61,23 +67,27 @@ export default function ReportCard({ report, onCopy, onOpenScan }: {
       <div className="mt-4 space-y-2">
         <h3 className="text-sm font-semibold">Drapeaux détectés</h3>
         <div className="flex flex-wrap gap-2">
-          {report.flags.length ? report.flags.map((f) => (
-            <span key={f} className="badge border-slate-700 text-slate-200 bg-slate-800/60">
-              {FLAG_LABELS[f] ?? f}
-            </span>
-          )) : (
+          {report.flags.length ? (
+            report.flags.map((f) => (
+              <span key={f} className="badge border-slate-700 text-slate-200 bg-slate-800/60">
+                {FLAG_LABELS[f] ?? f}
+              </span>
+            ))
+          ) : (
             <span className="muted">Aucun drapeau significatif.</span>
           )}
         </div>
       </div>
 
-      <p className="mt-4 text-sm leading-relaxed text-slate-300">
-        {report.summary}
-      </p>
+      <p className="mt-4 text-sm leading-relaxed text-slate-300">{report.summary}</p>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button className="btn" onClick={() => onCopy(report.address)}>Copier l’adresse</button>
-        <button className="btn" onClick={() => onOpenScan(report.address)}>Ouvrir sur Etherscan</button>
+        <button className="btn" onClick={() => onCopy(report.address)}>
+          Copier l’adresse
+        </button>
+        <button className="btn" onClick={() => onOpenScan(report.address)}>
+          Ouvrir sur Etherscan
+        </button>
       </div>
     </div>
   );

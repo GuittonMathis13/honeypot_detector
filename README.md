@@ -1,3 +1,6 @@
+> **Statut v1.0.0 (POC)** – Fonctionnel (front+back+tests). Détection statique de patterns (proxy, mint, blacklist, fees...). 
+> Non déterministe à 100 % (dépend des explorers/API). Roadmap : catégories de risque, renonciation réelle via events, bytecode fallback, checks LP.
+
 # Honeypot Detector Pro
 
 Honeypot Detector Pro is a proof-of-concept tool for assessing the risk of
@@ -150,6 +153,3 @@ They rely on stubbing/mocking calls so tests don’t require real API keys.
 Disclaimer
 This project is provided for educational purposes and should not be considered
 financial advice. Always perform your own due diligence before interacting with tokens.
-
-
-

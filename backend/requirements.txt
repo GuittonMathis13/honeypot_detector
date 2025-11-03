@@ -1,4 +1,4 @@
-# Required Python packages for the backend of the Honeypot Detector Pro
+# Required Python packages for the backend of the Honeypot Detector Pro
 fastapi==0.110.0
 uvicorn==0.27.1
 requests==2.31.0
