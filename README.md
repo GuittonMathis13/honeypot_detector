@@ -2,7 +2,7 @@
 
 > **Statut v1.0.0 (POC)** — Outil d’analyse **statique** de tokens ERC-20 (ETH / BSC / Polygon).  
 > Récupère le code source via **Etherscan v2** (avec `chainid`), suit les **proxys** (Implementation), applique des **règles heuristiques**, calcule un **score 0–10** et un **verdict** (SAFE / MEDIUM / HIGH).  
-> Idéal portfolio/screening. Non déterministe à 100 % (dépend des explorers & de la vérification de code).
+
 
 ---
 
