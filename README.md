@@ -1,127 +1,128 @@
 # Honeypot Detector Pro
 
-> **Statut v1.0.0 (POC)** — Outil d’analyse **statique** de tokens ERC-20 (ETH / BSC / Polygon).  
-> Récupère le code source via **Etherscan v2** (avec `chainid`), suit les **proxys** (Implementation), applique des **règles heuristiques**, calcule un **score 0–10** et un **verdict** (SAFE / MEDIUM / HIGH).  
+Outil **Web3 / sécurité** d’analyse **statique** de tokens **ERC-20** (Ethereum / BSC / Polygon).  
+Il récupère le code via **Etherscan v2 (chainid)**, suit les **proxys → Implementation**, applique des règles heuristiques, puis produit un **score 0–10** et un **verdict** (**SAFE / MEDIUM / HIGH**) avec un résumé lisible.
 
-
----
-
-##  Fonctionnalités
-
-- **Backend (FastAPI + CLI)**  
-  - Etherscan v2 multi-chain (`chainid` = 1, 56, 137)  
-  - Suivi **Proxy → Implementation** + flag `proxy_pattern`  
-  - Heuristiques : `modifiable_fee`, `blacklist_whitelist`, `uniswap_restriction`, `minting`, `pause_trading`, `transfer_limits`, `dynamic_fees_public`, `transfer_trap`, `max_limits_strict`, `proxy_pattern`, `unverified_code`  
-  - Scoring 0–10 + verdict + résumé
-
-- **Frontend (React / Vite / Tailwind)**  
-  - Input adresse + réseau → appel API  
-  - Loader, rapport, **historique local** (5 derniers), copier adresse, lien explorer
-
-- **Tests** : règles & scoring (pytest)
+> Objectif : aider au **screening rapide** d’un token avant interaction (achat, LP, approval), en complément d’une vérification manuelle.
 
 ---
 
-##  Stack
+## Ce que fait le projet
 
+### Backend (FastAPI + CLI)
+- Récupération du code source via **Etherscan v2** (multi-chain)
+- Détection **Proxy → Implementation** + flag `proxy_pattern`
+- Règles heuristiques (flags) :
+  - `modifiable_fee`, `blacklist_whitelist`, `uniswap_restriction`
+  - `minting`, `pause_trading`, `transfer_limits`, `dynamic_fees_public`
+  - `transfer_trap`, `max_limits_strict`, `proxy_pattern`, `unverified_code`
+- **Scoring 0–10** + **verdict** + **résumé** (rapport JSON)
+
+### Frontend (React / Vite / Tailwind)
+- Input **adresse + réseau** → appel API
+- Loader, affichage rapport, **historique local (5 derniers)**, copier adresse, lien explorer
+
+### Tests
+- Tests des règles & du scoring (**pytest**)
+
+---
+
+## Stack
 - **Backend** : Python, FastAPI, Uvicorn, Requests, Pytest  
 - **Frontend** : React 18, Vite, TypeScript, Tailwind, Axios
 
 ---
 
-## 📦 Structure
+## Structure du repo
+
+```txt
 .
 ├─ .github/workflows/
-│ ├─ backend.yml
-│ └─ frontend.yml
+│  ├─ backend.yml
+│  └─ frontend.yml
 ├─ backend/
-│ ├─ init.py
-│ ├─ analyzer.py
-│ ├─ main.py
-│ ├─ report.py
-│ ├─ requirements.txt
-│ └─ rules.py
+│  ├─ __init__.py
+│  ├─ analyzer.py
+│  ├─ main.py
+│  ├─ report.py
+│  ├─ requirements.txt
+│  └─ rules.py
 ├─ frontend/
-│ ├─ index.html
-│ ├─ package.json
-│ ├─ vite.config.ts
-│ ├─ postcss.config.cjs
-│ ├─ tailwind.config.cjs
-│ └─ src/...
+│  ├─ index.html
+│  ├─ package.json
+│  ├─ vite.config.ts
+│  ├─ postcss.config.cjs
+│  ├─ tailwind.config.cjs
+│  └─ src/...
 ├─ example_reports/
-│ ├─ SafeToken.json
-│ └─ ScamToken.json
+│  ├─ SafeToken.json
+│  └─ ScamToken.json
 ├─ tests/
-│ └─ test_analyzer.py
+│  └─ test_analyzer.py
 ├─ cli.py
 ├─ LICENSE
-├─ README.md
-└─ .gitignore
+└─ README.md
 
 
----
-
-## ⚙️ Installation & Lancement
-
-### Backend (dev)
-
-```bash
+Démarrage rapide
+1) Backend (dev)
 cd backend
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 
-# Clés API (Etherscan v2)
-export ETHERSCAN_API_KEY="xxxxx"     # couvre multi-chain en v2
-export BSCSCAN_API_KEY="(optionnel)"
-export POLYGONSCAN_API_KEY="(optionnel)"
 
+Clés API (Etherscan v2)
+Le backend utilise Etherscan v2
+export ETHERSCAN_API_KEY="xxxxx"     # recommandé (couvre multi-chain en v2)
+export BSCSCAN_API_KEY="xxxxx"       # optionnel
+export POLYGONSCAN_API_KEY="xxxxx"   # optionnel
+
+
+Lancer l’API :
 uvicorn main:app --reload
-# → http://127.0.0.1:8000
+# http://127.0.0.1:8000
 
-Endpoint
-POST /analyze
-{ "address": "0x...", "chain": "ethereum|bsc|polygon" }
-
-CLI (analyse directe)
-cd backend
-python main.py 0xA0b8... --chain ethereum
-
-Frontend (dev)
+2) Frontend (dev)
 cd frontend
 npm install
 npm run dev
-# → http://localhost:5173
+# http://localhost:5173
+
+
+API
+POST /analyze
+Body : { "address": "0x...", "chain": "ethereum|bsc|polygon" }
+Réponse : rapport JSON incluant score, verdict, flags déclenchés
+
+
+CLI
+Analyse directe depuis le backend : cd backend
+python main.py 0xA0b8... --chain ethereum
+
+
+Scoring & interprétation
+Le score n’est pas une preuve de scam : c’est un niveau de risque (contrôle, restrictions, comportements suspects).
+Exemple : un stablecoin peut sortir HIGH (centralisation : pause/blacklist/owner).
+Rappel des poids (simplifié, voir backend/report.py) :
+Fort : blacklist/whitelist, dynamic fees + setters, transfer limits, transfer trap
+Moyen : proxy_pattern, minting, pause trading
+Faible : max_limits_strict
+unverified_code si aucun code source récupérable
 
 Tests
 pytest -v --maxfail=1 --disable-warnings
 
-Scoring (rappel)
+Le dossier example_reports/ contient des rapports JSON prêts à consulter :
+SafeToken.json
+ScamToken.json
 
-Poids par drapeau (simplifié) — report.py :
 
-fort : blacklist/whitelist, dynamic fees + setters, transfer limits, transfer trap
+Limites :
+Analyse statique uniquement : ne remplace pas une vérification on-chain / lecture du code / simulation.
+Dépendance aux explorers (quotas, indisponibilités, code non vérifié).
+certains tokens “légitimes” peuvent être classés à risque élevé.
 
-moyen : proxy_pattern, minting, pause trading
 
-faible : max_limits_strict
-
-bonus : unverified_code si aucun code source
-
-Un stablecoin peut sortir HIGH (centralisation : pause/blacklist/owner).
-Ce n’est pas “scam automatique”, c’est un risque de contrôle.
-
-Roadmap courte
-
-Catégories de risque (Centralisation / Tokenomics / Suspicious) dans la réponse JSON
-
-Renonciation “réelle” (events + storage, Ownable/Ownable2Step)
-
-Bytecode fallback (web3.py) si pas de source
-
-Checks DeFi/LP (verrouillage, owner du pair)
-
-Cache + retries pour limiter unverified_code (quota/ratés explorer)
-
-Disclaimer
 Outil d’analyse statique à but éducatif.
-Ne constitue pas un conseil financier. Vérifiez toujours sur chain/explorer.
+Vérifiez toujours sur chain / explorer.
