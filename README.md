@@ -95,6 +95,8 @@ export POLYGONSCAN_API_KEY="xxxxx"   # optionnel
 ### Lancer l’API
 
 ```bash
+cd ~/projets/honeypot_detector/backend
+source .venv/bin/activate
 uvicorn main:app --reload
 ```
 
